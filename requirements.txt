@@ -1,0 +1,10 @@
+# Audio Ingestion & Deepfake Detection Requirements
+numpy>=1.24.0
+scipy>=1.10.0
+soundfile>=0.12.0
+pydantic>=2.0.0
+pytest>=7.0.0
+
+# Optional / Deep Learning Support
+torch>=2.0.0
+torchaudio>=2.0.0

@@ -1,0 +1,218 @@
+# ==============================================================================
+# Git Ignore Configuration for Voice Integrity Verification Framework
+# AICTE Problem ID: 26104 (Deepfake & Voice Cloning Detection)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Bytecode & Compiled Python Files
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.dll
+*.dylib
+
+# C extensions
+*.c
+*.cpp
+!src/**/*.py
+!tests/**/*.py
+
+# ------------------------------------------------------------------------------
+# 2. Virtual Environments & Package Managers
+# ------------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.env/
+bin/
+lib/
+lib64/
+include/
+Scripts/
+conda-meta/
+.conda/
+
+# ------------------------------------------------------------------------------
+# 3. Distribution, Builds & Packaging
+# ------------------------------------------------------------------------------
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+installed.cfg
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+wheels/
+share/python-wheels/
+
+# ------------------------------------------------------------------------------
+# 4. PyTorch, Machine Learning Weights & Model Checkpoints
+# ------------------------------------------------------------------------------
+*.pt
+*.pth
+*.bin
+*.onnx
+*.engine
+*.ckpt
+*.h5
+*.hdf5
+*.safetensors
+*.pkl
+*.pickle
+checkpoints/
+weights/
+saved_models/
+model_weights/
+wandb/
+runs/
+tensorboard/
+.tensorboard/
+
+# ------------------------------------------------------------------------------
+# 5. Audio, Media & Forensic Capture Dumps
+# (Prevents multi-gigabyte raw recordings from polluting git history)
+# ------------------------------------------------------------------------------
+output/
+!output/.gitkeep
+samples/
+!samples/.gitkeep
+forensic_archive/
+forensic_storage/
+temp_audio/
+recordings/
+*.wav
+*.mp3
+*.m4a
+*.mp4
+*.flac
+*.ogg
+*.aac
+*.wma
+*.opus
+*.raw
+*.pcm
+*.mov
+*.avi
+*.mkv
+
+# ------------------------------------------------------------------------------
+# 6. Testing, Code Coverage & Profiling
+# ------------------------------------------------------------------------------
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+htmlcov/
+.hypothesis/
+prof/
+profile/
+*.prof
+
+# ------------------------------------------------------------------------------
+# 7. Environment Variables, Secrets & Credentials
+# ------------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.env
+*.pem
+*.key
+*.crt
+*.pfx
+*.cert
+secrets/
+credentials.json
+client_secret*.json
+
+# Allow explicit example environment templates
+!.env.example
+!.env.template
+
+# ------------------------------------------------------------------------------
+# 8. IDEs, Text Editors & Operating System Artifacts
+# ------------------------------------------------------------------------------
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.code-workspace
+.history/
+
+# PyCharm / IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# Windows OS
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.directory
+.fuse_hidden*
+.nfs*
+
+# ------------------------------------------------------------------------------
+# 9. Logs & Runtime Dumps
+# ------------------------------------------------------------------------------
+*.log
+*.log.*
+logs/
+*.pid
+*.seed
+*.pid.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
