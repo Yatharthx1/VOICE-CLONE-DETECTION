@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live System Audio Interceptor & Voice Integrity Verification</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0a0e17;
+      --card-bg: #111827;
+      --card-border: #1f293d;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --danger-red: #ef4444;
+      --warning-amber: #f59e0b;
+      --success-green: #10b981;
+      --purple: #8b5cf6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-badge h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .problem-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      background: #1e1b4b;
+      color: #818cf8;
+      border: 1px solid #3730a3;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--success-green);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--success-green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    main {
+      flex: 1;
+      max-width: 1350px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 1.75rem;
+      display: grid;
+      grid-template-columns: 1.05fr 1.25fr;
+      gap: 1.75rem;
+    }
+
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .panel-title {
+      font-size: 1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #e5e7eb;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 0.75rem;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0.4rem;
+      background: #0b0f19;
+      padding: 0.3rem;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 0.5rem 0.5rem;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: var(--accent-blue);
+      color: #fff;
+    }
+
+    /* Controls */
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .input-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    select, input[type="text"] {
+      background: #0b0f19;
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.6rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    select:focus, input[type="text"]:focus {
+      border-color: var(--accent-blue);
+    }
+
+    /* System Audio Interceptor Box */
+    .interceptor-box {
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      background: #0b0f19;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .call-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .call-status {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+    .call-idle { background: #1f293d; color: var(--text-muted); }
+    .call-active { background: rgba(16, 185, 129, 0.2); color: var(--success-green); border: 1px solid var(--success-green); }
+    .call-alert { background: rgba(239, 68, 68, 0.2); color: var(--danger-red); border: 1px solid var(--danger-red); animation: pulse 1s infinite; }
+
+    canvas {
+      width: 100%;
+      height: 70px;
+      background: #060911;
+      border-radius: 6px;
+      border: 1px solid #141c2e;
+    }
+
+    .btn-action {
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.25rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .btn-action:hover { background: #2563eb; }
+    .btn-action:disabled { background: #374151; cursor: not-allowed; }
+    .btn-danger { background: #dc2626; }
+    .btn-danger:hover { background: #b91c1c; }
+
+    /* Results Dashboard */
+    .verdict-banner {
+      background: #0b0f19;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .verdict-tag {
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }
+    .verdict-REAL { color: var(--success-green); }
+    .verdict-SYNTHETIC { color: var(--danger-red); }
+    .verdict-MANIPULATED { color: var(--warning-amber); }
+    .verdict-UNCERTAIN { color: var(--text-muted); }
+
+    .score-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2rem;
+      font-weight: 700;
+    }
+
+    /* Analysis Matrix */
+    .analysis-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+    }
+    .metric-card {
+      background: #0b0f19;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 0.75rem;
+    }
+    .metric-name {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+    .metric-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #e5e7eb;
+    }
+
+    .risk-factors-list {
+      background: #080c14;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    .risk-item {
+      font-size: 0.8rem;
+      color: #fca5a5;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.4rem;
+    }
+
+    .log-box {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      background: #050811;
+      border: 1px solid var(--card-border);
+      padding: 0.6rem;
+      border-radius: 6px;
+      color: #9ca3af;
+      max-height: 110px;
+      overflow-y: auto;
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: #1f293d;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 0.4rem;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .hint-box {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      font-size: 0.75rem;
+      color: #93c5fd;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 950px) {
+      main { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-badge">
+      <span style="font-size: 1.4rem;">🛡️</span>
+      <div>
+        <h1>Voice Integrity Verification Engine</h1>
+      </div>
+      <span class="problem-tag">AICTE #26104</span>
+    </div>
+    <div class="status-indicator">
+      <span class="pulse-dot"></span>
+      <span id="engineStatusText">System Audio Interceptor Ready</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left Column: System Audio Interceptor & Inputs -->
+    <div class="panel">
+      <div class="panel-title">
+        <span>🔊</span>
+        <span>Live System Audio & Call Interceptor</span>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" id="tabSysBtn" onclick="switchTab('system')">🔊 Live System Audio</button>
+        <button class="tab-btn" id="tabSimBtn" onclick="switchTab('sim')">⚡ Stream Simulator</button>
+        <button class="tab-btn" id="tabFileBtn" onclick="switchTab('file')">📁 Inspect Audio File</button>
+        <button class="tab-btn" id="tabEnrollBtn" onclick="switchTab('enroll')">👤 VIP Registry</button>
+      </div>
+
+      <!-- Operational Context -->
+      <div class="input-group">
+        <label class="input-label">Risk Policy Scenario:</label>
+        <select id="scenarioSelect">
+          <option value="high_value_transaction">High-Value Wire Transfer (Strict 70% threshold)</option>
+          <option value="confidential_disclosure">Executive / Confidential Disclosure</option>
+          <option value="standard_support">Contact Center Customer Care</option>
+          <option value="general_telephony" selected>General Telephony / System Audio</option>
+        </select>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Claimed Caller Identity (Biometric Impersonation Check):</label>
+        <input type="text" id="speakerIdInput" placeholder="e.g. CXO_001 (or leave blank for unknown caller)">
+      </div>
+
+      <!-- Tab 1: Live System Audio (Loopback) -->
+      <div id="systemSection">
+        <div class="interceptor-box">
+          <div class="call-header">
+            <div>
+              <span style="font-weight: 600; font-size: 0.9rem;">Speaker/System Audio:</span>
+              <span style="color: var(--text-muted); font-size: 0.85rem;" id="sysSessionId">#SYS-LOOPBACK</span>
+            </div>
+            <span class="call-status call-idle" id="sysBadge">IDLE / DISCONNECTED</span>
+          </div>
+
+          <div class="hint-box">
+            💡 <strong>How it works:</strong> Click "Start Intercepting", select <em>Entire Screen</em> (or <em>Tab</em>) and check <strong>"Also share system audio"</strong>. Any audio playing through your speakers (Zoom, Teams, Discord, YouTube, WhatsApp, phone call, AI TTS) will be analyzed in real-time!
+          </div>
+
+          <canvas id="sysVisualizer"></canvas>
+
+          <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);">
+            <span id="sysTimeText">Elapsed: 0.0s</span>
+            <span id="sysPacketsText">Ingested: 0 chunks</span>
+            <span id="sysLatencyText">Latency: -- ms</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+          <button class="btn-action" id="startSysBtn" onclick="startSystemAudioCapture(false)">
+            🔊 Intercept System Loopback
+          </button>
+          <button class="btn-action" id="startMicBtn" onclick="startSystemAudioCapture(true)" style="background: #0284c7;">
+            🎤 Intercept Microphone Audio
+          </button>
+          <button class="btn-action btn-danger" id="stopSysBtn" onclick="stopSystemAudioCapture()" style="display: none; width: 35%;">
+            ⏹️ Stop
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab 2: Stream Simulator -->
+      <div id="simSection" style="display: none;">
+        <div class="interceptor-box">
+          <div class="call-header">
+            <span style="font-weight: 600; font-size: 0.9rem;">VoIP Telephony Stream:</span>
+            <span class="call-status call-idle" id="simBadge">READY</span>
+          </div>
+          <div class="input-group">
+            <label class="input-label">Select Incoming Voice Stream Source:</label>
+            <select id="streamSourceSelect">
+              <option value="synthetic_ai">🚨 Synthetic AI Cloned Caller (HiFi-GAN / Monotone TTS)</option>
+              <option value="genuine_caller">✅ Genuine Human Caller (Organic Biological Phonation)</option>
+              <option value="spliced_call">⚠️ Spliced & Manipulated Audio (Concatenation Discontinuities)</option>
+            </select>
+          </div>
+          <canvas id="simVisualizer"></canvas>
+        </div>
+        <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+          <button class="btn-action" id="startSimBtn" onclick="startSimulatedStream()">
+            ▶️ Stream Incoming VoIP Call
+          </button>
+          <button class="btn-action btn-danger" id="stopSimBtn" onclick="stopSimulatedStream()" style="display: none; width: 35%;">
+            ⏹️ Disconnect
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab 3: File Inspection -->
+      <div id="fileSection" style="display: none;">
+        <div class="interceptor-box" style="text-align: center; padding: 2rem 1rem;">
+          <span style="font-size: 2.2rem;">📥</span>
+          <div style="margin-top: 0.5rem; font-size: 0.9rem;">Inspect received audio/voicemail recording:</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem;">WAV, MP3, M4A, MP4, FLAC, OGG</div>
+          <input type="file" id="fileInput" accept="audio/*,video/mp4" style="font-size: 0.85rem;">
+        </div>
+        <button class="btn-action" style="margin-top: 1rem;" onclick="verifyUploadedFile()">
+          ⚡ Run Full Forensics & Verification
+        </button>
+      </div>
+
+      <!-- Tab 4: Speaker Enrollment -->
+      <div id="enrollSection" style="display: none;">
+        <div class="input-group">
+          <label class="input-label">VIP / Executive Full Name:</label>
+          <input type="text" id="enrollName" placeholder="e.g. Jane Smith (CFO)">
+        </div>
+        <div class="input-group" style="margin-top: 0.5rem;">
+          <label class="input-label">Assign Speaker ID:</label>
+          <input type="text" id="enrollId" placeholder="e.g. CXO_001">
+        </div>
+        <div class="interceptor-box" style="margin-top: 0.75rem;">
+          <div style="font-size: 0.85rem;">Upload genuine reference voice sample:</div>
+          <input type="file" id="enrollFile" accept="audio/*" style="font-size: 0.85rem; margin-top: 0.4rem;">
+        </div>
+        <button class="btn-action" style="margin-top: 1rem;" onclick="enrollSpeaker()">
+          👤 Enroll Genuine Voiceprint Reference
+        </button>
+      </div>
+
+      <div class="log-box" id="consoleLog">
+        [SYSTEM ONLINE] Real-time system audio interceptor ready on WebSocket /api/v1/stream/ws
+      </div>
+    </div>
+
+    <!-- Right Column: Real-Time Security Assessment -->
+    <div class="panel">
+      <div class="panel-title">
+        <span>🛡️</span>
+        <span>Voice Authenticity & AI Probability Analysis</span>
+      </div>
+
+      <div class="verdict-banner" id="verdictBanner">
+        <div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Authenticity Verdict</div>
+          <div class="verdict-tag" id="verdictText">AWAITING AUDIO</div>
+          <div style="font-size: 0.8rem; color: var(--accent-cyan); margin-top: 0.2rem;" id="verdictCategoryText">Status: Interceptor Ready</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; line-height: 1.3;" id="verdictExplanationText">Awaiting voice audio for neural & acoustic verification.</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 0.75rem; color: var(--text-muted);">AI PROBABILITY</div>
+          <div class="score-num" id="aiProbScore" style="color: var(--accent-cyan);">0.0%</div>
+          <div style="font-size: 0.75rem; font-weight: 600;" id="riskLevel">TIER: READY</div>
+        </div>
+      </div>
+
+      <!-- Core Detection Metrics Grid -->
+      <div class="analysis-grid" style="grid-template-columns: repeat(3, 1fr); gap: 0.6rem;">
+        <div class="metric-card" style="text-align: center;">
+          <div class="metric-name">AI Probability</div>
+          <div class="metric-val" id="primaryAiProbVal" style="font-size: 1.15rem; color: var(--accent-blue);">0.0%</div>
+        </div>
+        <div class="metric-card" style="text-align: center;">
+          <div class="metric-name">Confidence</div>
+          <div class="metric-val" id="confidenceVal" style="font-size: 1.15rem; color: var(--success-green);">-</div>
+        </div>
+        <div class="metric-card" style="text-align: center;">
+          <div class="metric-name">Window Consistency</div>
+          <div class="metric-val" id="consistencyVal" style="font-size: 1.15rem; color: #a78bfa;">-</div>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);">
+          <span>Calibrated AI Evidence Scale (0% Human ── 100% Cloned AI):</span>
+          <span id="riskPctText">0% AI Probability</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="riskBarFill"></div>
+        </div>
+      </div>
+
+      <!-- Multi-Window Timeline Box -->
+      <div id="windowTimelineContainer" style="display: none; background: #080c14; border: 1px solid var(--card-border); border-radius: 8px; padding: 0.6rem;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Multi-Window Temporal Breakdown:</div>
+        <div id="windowPillsList" style="display: flex; gap: 0.4rem; flex-wrap: wrap;"></div>
+      </div>
+
+      <div class="panel-title" style="margin-top: 0.25rem; font-size: 0.85rem;">
+        <span>🔬</span>
+        <span>Parallel Forensic & Acoustic Modalities</span>
+      </div>
+
+      <div class="analysis-grid">
+        <div class="metric-card">
+          <div class="metric-name">1. Acoustic Phonation (Pitch/Jitter/Shimmer)</div>
+          <div class="metric-val" id="acousticVal">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-name">2. Spectral Dynamics & HF Cutoff</div>
+          <div class="metric-val" id="spectralVal">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-name">3. Prosody & Rhythm (Rate/nPVI/Monotone)</div>
+          <div class="metric-val" id="prosodyVal">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-name">4. Neural Vocoder & Splice Artifacts</div>
+          <div class="metric-val" id="artifactsVal">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-name">5. Phase Coherence & Modified Group Delay</div>
+          <div class="metric-val" id="phaseVal">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-name">6. Neural Deepfake Classifier (Raw Score)</div>
+          <div class="metric-val" id="mlVal">-</div>
+        </div>
+      </div>
+
+      <div class="panel-title" style="margin-top: 0.25rem; font-size: 0.85rem;">
+        <span>🚨</span>
+        <span>Forensic Anomaly Drivers & Intervention Triggers</span>
+      </div>
+
+      <div class="risk-factors-list" id="riskFactorsList">
+        <div style="font-size: 0.8rem; color: var(--text-muted);">No voice audio intercepted yet. Start system audio capture or inspect audio file.</div>
+      </div>
+
+      <div class="metric-card" style="margin-top: auto;">
+        <div class="metric-name">Caller Biometric Verification:</div>
+        <div class="metric-val" id="speakerMatchVal" style="font-size: 0.85rem;">Anonymous Call Stream (No Claim)</div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let isCapturingSystem = false;
+    let systemStream = null;
+    let audioContext = null;
+    let scriptProcessor = null;
+    let ws = null;
+    let packetCount = 0;
+    let startTime = null;
+
+    function log(msg) {
+      console.log(`[VoiceIntegrity] ${msg}`);
+      const el = document.getElementById('consoleLog');
+      if (el) {
+        el.innerHTML += `\n[${new Date().toLocaleTimeString()}] ${msg}`;
+        el.scrollTop = el.scrollHeight;
+      }
+    }
+
+    function switchTab(tab) {
+      document.getElementById('systemSection').style.display = tab === 'system' ? 'block' : 'none';
+      document.getElementById('simSection').style.display = tab === 'sim' ? 'block' : 'none';
+      document.getElementById('fileSection').style.display = tab === 'file' ? 'block' : 'none';
+      document.getElementById('enrollSection').style.display = tab === 'enroll' ? 'block' : 'none';
+
+      document.getElementById('tabSysBtn').className = 'tab-btn' + (tab === 'system' ? ' active' : '');
+      document.getElementById('tabSimBtn').className = 'tab-btn' + (tab === 'sim' ? ' active' : '');
+      document.getElementById('tabFileBtn').className = 'tab-btn' + (tab === 'file' ? ' active' : '');
+      document.getElementById('tabEnrollBtn').className = 'tab-btn' + (tab === 'enroll' ? ' active' : '');
+    }
+
+
+
+    // Connect WebSocket
+    function connectWebSocket(clientSampleRate, onReady) {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${proto}//${window.location.host}/api/v1/stream/ws`;
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        log(`WebSocket stream connected to server. Negotiating client sample rate: ${clientSampleRate} Hz`);
+        ws.send(JSON.stringify({
+          scenario: document.getElementById('scenarioSelect').value,
+          claimed_speaker_id: document.getElementById('speakerIdInput').value || null,
+          sample_rate: clientSampleRate
+        }));
+        if (onReady) onReady();
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'LIVE_VERDICT') {
+          updateDashboard(msg);
+          document.getElementById('sysLatencyText').innerText = `Latency: ${msg.latency_ms} ms`;
+          log(`[STREAM WINDOW #${msg.chunk_index}] Verdict: [${msg.verdict}] | Risk: ${msg.dynamic_risk_score}/100 (${msg.latency_ms}ms)`);
+        }
+      };
+
+      ws.onerror = (err) => log("WebSocket error: " + err);
+      ws.onclose = () => log("WebSocket stream closed.");
+    }
+
+    // ==========================================
+    // 🔊 REAL-TIME SYSTEM AUDIO & MIC CAPTURE
+    // ==========================================
+    async function startSystemAudioCapture(useMic = false) {
+      if (isCapturingSystem) return;
+
+      try {
+        if (useMic) {
+          log("Requesting microphone audio capture...");
+          systemStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            },
+            video: false
+          });
+        } else {
+          log("Requesting system audio capture via browser loopback...");
+          systemStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            }
+          });
+
+          const audioTracks = systemStream.getAudioTracks();
+          if (!audioTracks || audioTracks.length === 0) {
+            alert("No system audio track detected! Please ensure you check 'Share audio' or 'Also share system audio' in the browser sharing popup.");
+            systemStream.getTracks().forEach(t => t.stop());
+            return;
+          }
+          systemStream.getVideoTracks().forEach(t => t.onended = stopSystemAudioCapture);
+        }
+
+        // Setup Web Audio API Pipeline with native hardware rate
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        window.audioContext = audioContext;
+        const nativeSr = audioContext.sampleRate || 48000;
+        log(`AudioContext initialized at native hardware rate: ${nativeSr} Hz (polyphase sinc resampled in backend)`);
+
+        connectWebSocket(nativeSr, () => {
+          const source = audioContext.createMediaStreamSource(systemStream);
+          window.audioSource = source;
+
+          // 4096 samples at native rate
+          scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+          window.scriptProcessor = scriptProcessor;
+          packetCount = 0;
+          startTime = Date.now();
+
+          scriptProcessor.onaudioprocess = (e) => {
+            if (!isCapturingSystem || !ws || ws.readyState !== WebSocket.OPEN) return;
+            const inputData = e.inputBuffer.getChannelData(0);
+            
+            // Send clean Float32 array directly to backend without boundary clicks
+            const copy = new Float32Array(inputData);
+            ws.send(copy.buffer);
+
+            packetCount++;
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            document.getElementById('sysTimeText').innerText = `Elapsed: ${elapsed}s`;
+            document.getElementById('sysPacketsText').innerText = `Ingested: ${packetCount} chunks`;
+
+            drawWaveform(copy, 'sysVisualizer');
+          };
+
+          source.connect(scriptProcessor);
+          scriptProcessor.connect(audioContext.destination);
+
+          isCapturingSystem = true;
+          document.getElementById('startSysBtn').style.display = 'none';
+          document.getElementById('startMicBtn').style.display = 'none';
+          document.getElementById('stopSysBtn').style.display = 'flex';
+          document.getElementById('sysBadge').className = 'call-status call-active';
+          document.getElementById('sysBadge').innerText = useMic ? '🎤 INTERCEPTING MIC AUDIO' : '🔊 INTERCEPTING SYSTEM AUDIO';
+          log(`✅ Live Audio Interceptor active! Listening to ${useMic ? 'Microphone' : 'System Loopback'} at ${nativeSr} Hz...`);
+        });
+
+      } catch (err) {
+        log("Audio capture failed: " + err.message);
+        alert("Audio Capture Error: " + err.message);
+      }
+    }
+
+    function stopSystemAudioCapture() {
+      isCapturingSystem = false;
+      if (systemStream) {
+        systemStream.getTracks().forEach(t => t.stop());
+        systemStream = null;
+      }
+      if (scriptProcessor) {
+        scriptProcessor.disconnect();
+        scriptProcessor = null;
+      }
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+      window.scriptProcessor = null;
+      window.audioSource = null;
+      window.audioContext = null;
+      if (ws) ws.close();
+
+      document.getElementById('startSysBtn').style.display = 'flex';
+      document.getElementById('startMicBtn').style.display = 'flex';
+      document.getElementById('stopSysBtn').style.display = 'none';
+      document.getElementById('sysBadge').className = 'call-status call-idle';
+      document.getElementById('sysBadge').innerText = 'IDLE / DISCONNECTED';
+      log("Stopped audio interceptor.");
+    }
+
+    // ==========================================
+    // ⚡ STREAM SIMULATOR
+    // ==========================================
+    let simInterval = null;
+    let simIndex = 0;
+
+    function startSimulatedStream() {
+      connectWebSocket(() => {
+        document.getElementById('startSimBtn').style.display = 'none';
+        document.getElementById('stopSimBtn').style.display = 'flex';
+        document.getElementById('simBadge').className = 'call-status call-active';
+        document.getElementById('simBadge').innerText = '⚡ SIMULATING INCOMING STREAM';
+
+        const source = document.getElementById('streamSourceSelect').value;
+        const sr = 16000;
+        const size = 1600; // 100ms
+        simIndex = 0;
+
+        simInterval = setInterval(() => {
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          simIndex++;
+          const packet = new Float32Array(size);
+          const t0 = (simIndex * size) / sr;
+
+          for (let i = 0; i < size; i++) {
+            const t = t0 + i / sr;
+            if (source === 'synthetic_ai') {
+              const f0 = 140.0;
+              const harmonic = 0.5 * Math.sin(2 * Math.PI * f0 * t) + 0.3 * Math.sin(2 * Math.PI * 2 * f0 * t);
+              const checkerboard = 0.15 * Math.sin(2 * Math.PI * 3800 * t);
+              packet[i] = (harmonic + checkerboard) * 0.7;
+            } else if (source === 'spliced_call') {
+              const f0 = 160.0 + 20.0 * Math.sin(2 * Math.PI * 1.5 * t);
+              const jump = (Math.floor(t / 1.5) % 2 === 0) ? 0.8 : 0.05;
+              packet[i] = 0.6 * Math.sin(2 * Math.PI * f0 * t) * jump;
+            } else {
+              const f0 = 135.0 + 25.0 * Math.sin(2 * Math.PI * 1.2 * t) + (Math.random() - 0.5) * 4.0;
+              const harmonic = 0.5 * Math.sin(2 * Math.PI * f0 * t) + 0.3 * Math.sin(2 * Math.PI * 2 * f0 * t);
+              packet[i] = harmonic * 0.7 + (Math.random() - 0.5) * 0.01;
+            }
+          }
+
+          ws.send(packet.buffer);
+          drawWaveform(packet, 'simVisualizer');
+        }, 100);
+      });
+    }
+
+    function stopSimulatedStream() {
+      if (simInterval) clearInterval(simInterval);
+      if (ws) ws.close();
+      document.getElementById('startSimBtn').style.display = 'flex';
+      document.getElementById('stopSimBtn').style.display = 'none';
+      document.getElementById('simBadge').className = 'call-status call-idle';
+      document.getElementById('simBadge').innerText = 'READY';
+      log("Stopped simulated stream.");
+    }
+
+    function drawWaveform(samples, canvasId) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#060911';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#3b82f6';
+      ctx.beginPath();
+
+      const sliceWidth = canvas.width / samples.length;
+      let x = 0;
+      for (let i = 0; i < samples.length; i += 4) {
+        const v = samples[i];
+        const y = (v + 1) * (canvas.height / 2);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth * 4;
+      }
+      ctx.stroke();
+    }
+
+    function updateDashboard(data) {
+      const vText = document.getElementById('verdictText');
+
+      if (data.verdict === 'NO_SPEECH') {
+        vText.innerText = 'NO SPEECH DETECTED';
+        vText.className = 'verdict-tag verdict-UNCERTAIN';
+        document.getElementById('aiProbScore').innerText = 'N/A';
+        document.getElementById('aiProbScore').style.color = 'var(--text-muted)';
+        document.getElementById('primaryAiProbVal').innerText = 'N/A (0.0%)';
+        document.getElementById('primaryAiProbVal').style.color = 'var(--text-muted)';
+        document.getElementById('confidenceVal').innerText = 'N/A';
+        document.getElementById('consistencyVal').innerText = 'N/A';
+        document.getElementById('verdictCategoryText').innerText = 'Status: No Speech Phonation';
+        document.getElementById('verdictExplanationText').innerText = data.verdict_explanation || 'Audio is silent or below phonation threshold. Zero AI risk.';
+        document.getElementById('riskLevel').innerText = 'TIER: LOW';
+        document.getElementById('riskPctText').innerText = '0% (No Speech Signal)';
+        document.getElementById('riskBarFill').style.width = '0%';
+        document.getElementById('sysBadge').className = 'call-status call-active';
+        document.getElementById('sysBadge').innerText = '🔇 SILENCE / NO SPEECH';
+        document.getElementById('windowTimelineContainer').style.display = 'none';
+        document.getElementById('mlVal').innerText = 'N/A (Silent Signal)';
+        document.getElementById('acousticVal').innerText = 'No Phonation';
+        document.getElementById('spectralVal').innerText = 'Noise Floor Only';
+        document.getElementById('prosodyVal').innerText = 'Zero Voiced Frames';
+        document.getElementById('artifactsVal').innerText = 'Clean / Inactive';
+        document.getElementById('phaseVal').innerText = 'Inactive';
+        document.getElementById('riskFactorsList').innerHTML = '<div style="font-size: 0.8rem; color: var(--text-muted);">No voice audio detected in signal.</div>';
+        return;
+      }
+
+      vText.innerText = data.verdict;
+      vText.className = `verdict-tag verdict-${data.verdict}`;
+
+      // AI Probability & Tier
+      const aiProb = (data.ai_probability !== undefined) ? data.ai_probability : (data.dynamic_risk_score / 100.0);
+      const aiProbPct = (aiProb * 100).toFixed(1);
+      document.getElementById('aiProbScore').innerText = `${aiProbPct}%`;
+      document.getElementById('primaryAiProbVal').innerText = `${aiProbPct}%`;
+
+      if (aiProb >= 0.75) {
+        document.getElementById('aiProbScore').style.color = 'var(--danger-red)';
+        document.getElementById('primaryAiProbVal').style.color = 'var(--danger-red)';
+      } else if (aiProb >= 0.45) {
+        document.getElementById('aiProbScore').style.color = 'var(--warning-amber)';
+        document.getElementById('primaryAiProbVal').style.color = 'var(--warning-amber)';
+      } else if (aiProb >= 0.35) {
+        document.getElementById('aiProbScore').style.color = '#e5e7eb';
+        document.getElementById('primaryAiProbVal').style.color = '#e5e7eb';
+      } else {
+        document.getElementById('aiProbScore').style.color = 'var(--success-green)';
+        document.getElementById('primaryAiProbVal').style.color = 'var(--success-green)';
+      }
+
+      // Confidence & Consistency
+      const confPct = ((data.confidence !== undefined ? data.confidence : 0.85) * 100).toFixed(1);
+      document.getElementById('confidenceVal').innerText = `${confPct}%`;
+
+      const consPct = ((data.window_consistency !== undefined ? data.window_consistency : 1.0) * 100).toFixed(1);
+      document.getElementById('consistencyVal').innerText = `${consPct}%`;
+
+      // Category & Explanation
+      if (data.verdict_category) {
+        document.getElementById('verdictCategoryText').innerText = `Tier: ${data.verdict_category}`;
+      } else {
+        document.getElementById('verdictCategoryText').innerText = `Action: ${data.recommended_action || 'Analyzed'}`;
+      }
+
+      if (data.verdict_explanation) {
+        document.getElementById('verdictExplanationText').innerText = data.verdict_explanation;
+      }
+
+      document.getElementById('riskLevel').innerText = `TIER: ${data.risk_level}`;
+      document.getElementById('riskPctText').innerText = `${aiProbPct}% AI Probability`;
+      document.getElementById('riskBarFill').style.width = `${Math.min(100, Math.max(0, aiProb * 100))}%`;
+
+      if (data.verdict === 'SYNTHETIC' || data.verdict === 'MANIPULATED') {
+        document.getElementById('sysBadge').className = 'call-status call-alert';
+        document.getElementById('sysBadge').innerText = 'HIGH RISK CLONED VOICE';
+      } else {
+        document.getElementById('sysBadge').className = 'call-status call-active';
+        document.getElementById('sysBadge').innerText = 'AUDIO VERIFIED ACTIVE';
+      }
+
+      // Multi-Window Breakdown Pills
+      const winContainer = document.getElementById('windowTimelineContainer');
+      const winList = document.getElementById('windowPillsList');
+      if (data.window_predictions && data.window_predictions.length > 1) {
+        winContainer.style.display = 'block';
+        winList.innerHTML = data.window_predictions.map((p, idx) => {
+          const pPct = (p * 100).toFixed(0);
+          const color = p >= 0.75 ? '#f87171' : (p <= 0.35 ? '#34d399' : '#fbbf24');
+          return `<span style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; background: #111827; border: 1px solid ${color}; color: ${color}; padding: 0.2rem 0.4rem; border-radius: 4px;">W${idx+1}: ${pPct}%</span>`;
+        }).join('');
+      } else {
+        winContainer.style.display = 'none';
+      }
+
+      // Raw classifier score
+      if (data.raw_score !== undefined) {
+        document.getElementById('mlVal').innerText = `Raw Score: ${data.raw_score.toFixed(3)} (${(data.ml_synthetic_probability * 100).toFixed(1)}%)`;
+      } else if (data.ml_synthetic_probability !== undefined) {
+        document.getElementById('mlVal').innerText = `${(data.ml_synthetic_probability * 100).toFixed(1)}% Synthetic`;
+      }
+
+      // Parallel DSP Indicators
+      const confirmedAi = data.verdict === 'SYNTHETIC' || data.verdict === 'MANIPULATED';
+      document.getElementById('acousticVal').innerText = confirmedAi ? 'Anomalous Phonation' : 'Natural Jitter/Shimmer';
+      document.getElementById('spectralVal').innerText = confirmedAi ? 'Brickwall Cutoff Detected' : 'Natural Roll-off';
+      document.getElementById('prosodyVal').innerText = confirmedAi ? 'Flat / Monotone Prosody' : 'Dynamic Prosody';
+      document.getElementById('artifactsVal').innerText = confirmedAi ? 'Neural Vocoder Detected' : 'Clean Phonation';
+      document.getElementById('phaseVal').innerText = confirmedAi ? 'Phase Dispersion Anomaly' : 'Coherent Phase MGD';
+
+      const rfList = document.getElementById('riskFactorsList');
+      if (data.risk_factors && data.risk_factors.length > 0) {
+        rfList.innerHTML = data.risk_factors.map(f => `<div class="risk-item"><span>⚠️</span><span>${f}</span></div>`).join('');
+      } else {
+        rfList.innerHTML = '<div style="font-size: 0.8rem; color: var(--success-green);">✅ Phonation matches biological human speech dynamics.</div>';
+      }
+    }
+
+    async function verifyUploadedFile() {
+      const fileInput = document.getElementById('fileInput');
+      if (!fileInput.files[0]) {
+        alert("Please select a received audio file first.");
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      formData.append('scenario', document.getElementById('scenarioSelect').value);
+      const spk = document.getElementById('speakerIdInput').value;
+      if (spk) formData.append('claimed_speaker_id', spk);
+
+      log("Submitting received audio file to /api/v1/verify endpoint...");
+      document.getElementById('verdictText').innerText = "ANALYZING...";
+      document.getElementById('verdictText').className = "verdict-tag verdict-UNCERTAIN";
+
+      try {
+        const res = await fetch('/api/v1/verify', { method: 'POST', body: formData });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        updateDashboard(data);
+
+        document.getElementById('speakerMatchVal').innerText = data.speaker_match
+          ? `✅ Biometric Match (${(data.speaker_similarity * 100).toFixed(1)}% similarity)`
+          : `❌ Impersonation Flagged (${(data.speaker_similarity * 100).toFixed(1)}% similarity)`;
+
+        log(`Verification completed: Verdict = [${data.verdict}], Risk = ${data.dynamic_risk_score}/100`);
+      } catch (err) {
+        log("Verification error: " + err.message);
+        alert("Verification failed: " + err.message);
+      }
+    }
+
+    async function enrollSpeaker() {
+      const name = document.getElementById('enrollName').value;
+      const spkId = document.getElementById('enrollId').value;
+      const fileInput = document.getElementById('enrollFile');
+
+      if (!name || !spkId || !fileInput.files[0]) {
+        alert("Please provide Speaker Name, Speaker ID, and reference audio file.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('speaker_id', spkId);
+      formData.append('name', name);
+      formData.append('file', fileInput.files[0]);
+
+      try {
+        log(`Enrolling genuine speaker '${spkId}'...`);
+        const res = await fetch('/api/v1/speakers/enroll', { method: 'POST', body: formData });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        log(`✅ Speaker '${data.name}' (ID: ${data.speaker_id}) successfully enrolled!`);
+        alert(`Speaker '${data.name}' enrolled successfully! Incoming calls claiming this ID will now be verified against this biometric voiceprint.`);
+      } catch (err) {
+        log("Enrollment error: " + err.message);
+        alert("Enrollment failed: " + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
