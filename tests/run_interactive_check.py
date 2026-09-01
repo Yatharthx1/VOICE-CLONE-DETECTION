@@ -6,7 +6,9 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+# pyrefly: ignore [missing-import]
 import numpy as np
+# pyrefly: ignore [missing-import]
 import soundfile as sf
 
 # Force UTF-8 so Windows cmd doesn't choke on fancy symbols
@@ -228,6 +230,7 @@ def main():
         print(f"\n🚀 Launching Voice Integrity Web App & API on http://localhost:{args.port} ...")
         print(f"👉 Open in browser: http://localhost:{args.port}")
         print(f"📖 Swagger Docs: http://localhost:{args.port}/docs\n")
+        # pyrefly: ignore [missing-import]
         import uvicorn
         from src.api.server import app
         uvicorn.run(app, host="0.0.0.0", port=args.port)
