@@ -48,6 +48,7 @@ function App() {
   const [hasRecordedAudio, setHasRecordedAudio] = useState(false);
   const micChunksRef = useRef<Float32Array[]>([]);
   const recorderRef = useRef<ScriptProcessorNode | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   // Preset state
   const [selectedPreset, setSelectedPreset] = useState<PresetSample | null>(null);
@@ -112,39 +113,207 @@ function App() {
   // ------ Live mic handlers ------
   const handleStartRecording = useCallback(async () => {
     try {
-      await forensicEngine.startMicrophone();
-      micChunksRef.current = [];
-      setHasRecordedAudio(false);
+      // Connect to the FastAPI real-time WebSocket
+      const ws = new WebSocket(
+        'ws://127.0.0.1:8000/api/v1/stream/ws'
+      );
 
-      // Capture audio data via ScriptProcessor for later analysis
-      const ctx = forensicEngine.getAudioContext();
-      const analyser = forensicEngine.getAnalyser();
-      const processor = ctx.createScriptProcessor(4096, 1, 1);
-      processor.onaudioprocess = (e) => {
-        const input = e.inputBuffer.getChannelData(0);
-        micChunksRef.current.push(new Float32Array(input));
+      wsRef.current = ws;
+
+      ws.onopen = async () => {
+        console.log('Connected to backend WebSocket');
+
+        // Tell backend that the stream is ready
+        ws.send(
+          JSON.stringify({
+            scenario: 'general_telephony',
+          })
+        );
+
+        await forensicEngine.startMicrophone();
+
+        micChunksRef.current = [];
+        setHasRecordedAudio(false);
+        setIsRecording(true);
+        setPhase('input-ready');
+
+        const ctx = forensicEngine.getAudioContext();
+        const analyser = forensicEngine.getAnalyser();
+
+        const processor = ctx.createScriptProcessor(
+          4096,
+          1,
+          1
+        );
+
+        processor.onaudioprocess = (e) => {
+          if (
+            wsRef.current &&
+            wsRef.current.readyState === WebSocket.OPEN
+          ) {
+            const input = e.inputBuffer.getChannelData(0);
+
+            // Keep a copy locally
+            micChunksRef.current.push(
+              new Float32Array(input)
+            );
+
+            // Send Float32 PCM directly to FastAPI
+            wsRef.current.send(
+              input.slice().buffer
+            );
+          }
+        };
+
+        analyser.connect(processor);
+
+        // Keep ScriptProcessor active without sending audio
+        // back through the speakers.
+        const silentGain = ctx.createGain();
+        silentGain.gain.value = 0;
+
+        processor.connect(silentGain);
+        silentGain.connect(ctx.destination);
+
+        recorderRef.current = processor;
       };
-      analyser.connect(processor);
-      processor.connect(ctx.destination);
-      recorderRef.current = processor;
 
-      setIsRecording(true);
-      setPhase('input-ready');
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          console.log('Backend WebSocket message:', data);
+
+          if (data.type === 'CONFIG_ACK') {
+            console.log('Backend stream ready');
+          }
+
+          if (data.type === 'LIVE_VERDICT') {
+            console.log('LIVE VERDICT:', data);
+
+            const isAi =
+              data.verdict === 'AI_CLONE_DETECTED';
+
+            const riskFactors = Array.isArray(data.risk_factors)
+              ? data.risk_factors
+              : [];
+
+            const liveReport: ForensicReport = {
+              isAi,
+              aiProbability: Math.round(
+                data.dynamic_risk_score ?? 0
+              ),
+              verdict: isAi
+                ? 'AI_CLONE_DETECTED'
+                : 'AUTHENTIC_HUMAN',
+              riskScore: Math.round(
+                data.dynamic_risk_score ?? 0
+              ),
+              confidence: Math.round(
+                data.confidence ?? 0
+              ),
+              fileName: 'Live System Audio',
+              durationSec: 0,
+              sampleRate: 48000,
+
+              indicators: {
+                spectralCutoff: {
+                  detected: riskFactors.length > 0,
+                  detail:
+                    riskFactors.join(' ') ||
+                    'No spectral risk factor reported.'
+                },
+                pitchJitter: {
+                  detected: riskFactors.length > 0,
+                  detail:
+                    riskFactors.join(' ') ||
+                    'No pitch-jitter risk factor reported.'
+                },
+                phaseCoherence: {
+                  detected: riskFactors.length > 0,
+                  detail:
+                    riskFactors.join(' ') ||
+                    'No phase-coherence risk factor reported.'
+                },
+                formantTransitions: {
+                  detected: riskFactors.length > 0,
+                  detail:
+                    riskFactors.join(' ') ||
+                    'No formant-transition risk factor reported.'
+                }
+              },
+
+              reasons: riskFactors.length
+                ? riskFactors
+                : [data.recommended_action || 'Live analysis completed.']
+            };
+
+            setReport(liveReport);
+          }
+
+          if (data.type === 'ERROR') {
+            console.error(
+              'Backend stream error:',
+              data.message
+            );
+          }
+        } catch (err) {
+          console.error(
+            'Invalid WebSocket message:',
+            err
+          );
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error(
+          'WebSocket connection error:',
+          error
+        );
+      };
+
+      ws.onclose = () => {
+        console.log('Backend WebSocket closed');
+        wsRef.current = null;
+      };
+
     } catch (err) {
-      console.error('Microphone access denied', err);
+      console.error(
+        'System audio capture failed:',
+        err
+      );
+
+      setIsRecording(false);
     }
   }, []);
 
   const handleStopRecording = useCallback(() => {
     forensicEngine.stopMicrophone();
+
     if (recorderRef.current) {
       try {
         recorderRef.current.disconnect();
-      } catch { /* ignore */ }
+      } catch {
+        // ignore
+      }
+
       recorderRef.current = null;
     }
+
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch {
+        // ignore
+      }
+
+      wsRef.current = null;
+    }
+
     setIsRecording(false);
-    setHasRecordedAudio(micChunksRef.current.length > 0);
+    setHasRecordedAudio(
+      micChunksRef.current.length > 0
+    );
   }, []);
 
   // ------ Analysis flow ------
@@ -221,8 +390,93 @@ function App() {
         },
         reasons: selectedPreset.whyReasons,
       };
-    } else if (uploadedBuffer) {
-      forensicResult = forensicEngine.analyzeAudio(uploadedBuffer, uploadedFile?.name || 'Uploaded Audio');
+    } else if (uploadedFile) {
+      const formData = new FormData();
+
+      formData.append('file', uploadedFile);
+      formData.append('scenario', 'general_telephony');
+
+      const response = await fetch(
+        'http://127.0.0.1:8000/api/v1/verify',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Backend returned HTTP ${response.status}`);
+      }
+
+      const backendResult = await response.json();
+
+      const aiProbability = Math.round(
+        (backendResult.ml_synthetic_probability ?? 0) * 100
+      );
+
+      const isAi =
+        backendResult.verdict === 'AI_CLONE_DETECTED' ||
+        aiProbability >= 50;
+
+      const riskFactors: string[] = Array.isArray(backendResult.risk_factors)
+        ? backendResult.risk_factors
+        : [];
+
+      forensicResult = {
+        isAi,
+        aiProbability,
+        verdict: isAi
+          ? 'AI_CLONE_DETECTED'
+          : 'AUTHENTIC_HUMAN',
+        riskScore: Math.round(
+          backendResult.dynamic_risk_score ?? 0
+        ),
+        confidence: Math.round(
+          backendResult.confidence ?? 0
+        ),
+        fileName: uploadedFile.name,
+        durationSec: uploadedBuffer?.duration ?? 0,
+        sampleRate: uploadedBuffer?.sampleRate ?? 48000,
+
+        indicators: {
+          spectralCutoff: {
+            detected: riskFactors.length > 0,
+            detail:
+              riskFactors.length > 0
+                ? riskFactors.join(' ')
+                : 'No specific spectral risk factor reported by the backend.',
+          },
+
+          pitchJitter: {
+            detected: riskFactors.length > 0,
+            detail:
+              riskFactors.length > 0
+                ? riskFactors.join(' ')
+                : 'No specific pitch-jitter risk factor reported by the backend.',
+          },
+
+          phaseCoherence: {
+            detected: riskFactors.length > 0,
+            detail:
+              riskFactors.length > 0
+                ? riskFactors.join(' ')
+                : 'No specific phase-coherence risk factor reported by the backend.',
+          },
+
+          formantTransitions: {
+            detected: riskFactors.length > 0,
+            detail:
+              riskFactors.length > 0
+                ? riskFactors.join(' ')
+                : 'No specific formant-transition risk factor reported by the backend.',
+          },
+        },
+
+        reasons:
+          riskFactors.length > 0
+            ? riskFactors
+            : ['Analysis completed by the backend.'],
+      };
     } else if (micChunksRef.current.length > 0) {
       // Concatenate mic chunks into a single buffer
       const ctx = forensicEngine.getAudioContext();
@@ -261,6 +515,14 @@ function App() {
   }, [selectedPreset, uploadedBuffer, uploadedFile]);
 
   const handleReset = useCallback(() => {
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch {
+        // ignore
+      }
+      wsRef.current = null;
+    }
     forensicEngine.stopPlayback();
     forensicEngine.stopMicrophone();
     if (recorderRef.current) {
@@ -314,7 +576,7 @@ function App() {
             <button
               type="button"
               className={`tab-btn ${mode === 'upload' ? 'active' : ''}`}
-              onClick={() => { if (phase !== 'analyzing') { setMode('upload'); handleReset(); }}}
+              onClick={() => { if (phase !== 'analyzing') { setMode('upload'); handleReset(); } }}
             >
               <Upload size={15} />
               Upload Audio
@@ -323,7 +585,7 @@ function App() {
             <button
               type="button"
               className={`tab-btn ${mode === 'live' ? 'active' : ''}`}
-              onClick={() => { if (phase !== 'analyzing') { setMode('live'); handleReset(); }}}
+              onClick={() => { if (phase !== 'analyzing') { setMode('live'); handleReset(); } }}
             >
               <Mic size={15} />
               Intercept System Audio
@@ -370,7 +632,7 @@ function App() {
 
                     {/* Dropzone */}
                     {!uploadedFile && !selectedPreset && (
-                      <UploadDropzone onFileSelected={handleFileSelected} disabled={phase === 'analyzing'} />
+                      <UploadDropzone onFileSelected={handleFileSelected} />
                     )}
 
 
@@ -406,10 +668,13 @@ function App() {
                             <Mic size={16} />
                             Start Recording
                           </button>
-                          {hasRecordedAudio && (
-                            <button className="btn-primary" onClick={runAnalysis}>
+                          {report && !isRecording && (
+                            <button
+                              className="btn-primary"
+                              onClick={() => setPhase('result')}
+                            >
                               <Shield size={16} />
-                              Analyze Recording
+                              View Result
                             </button>
                           )}
                         </>
