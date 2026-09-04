@@ -50,14 +50,14 @@ class IngestionConfig(BaseModel):
         description="Directory to store pristine forensic raw audio copies. If None, uses system temp/forensic directory."
     )
 
-    # --- Voice Activity Detection (VAD) ---
+    # --- Voice Activity Detection (VAD) & Non-Speech Rejection ---
     vad_enabled: bool = Field(
         default=True,
-        description="Enable Voice Activity Detection to segment speech vs silence/noise."
+        description="Enable Voice Activity Detection to segment speech vs silence/noise/music."
     )
     vad_energy_threshold_db: float = Field(
-        default=-40.0,
-        description="Energy threshold in dBFS to classify frame as speech."
+        default=-42.0,
+        description="Base energy threshold in dBFS to classify frame as potential speech."
     )
     vad_frame_duration_ms: int = Field(
         default=30,
@@ -70,6 +70,30 @@ class IngestionConfig(BaseModel):
     vad_min_silence_duration_ms: int = Field(
         default=250,
         description="Minimum duration in ms of non-speech to register a silence gap (hangover duration)."
+    )
+    vad_speech_band_min_hz: float = Field(
+        default=140.0,
+        description="Lower frequency limit of human vocal speech formant band in Hz."
+    )
+    vad_speech_band_max_hz: float = Field(
+        default=3800.0,
+        description="Upper frequency limit of speech formant band in Hz."
+    )
+    vad_subbass_cutoff_hz: float = Field(
+        default=85.0,
+        description="Cutoff frequency in Hz below which acoustic energy is considered sub-bass (music beat/drums/rumble)."
+    )
+    vad_pitch_min_hz: float = Field(
+        default=75.0,
+        description="Lowest biological fundamental frequency for human vocal phonation in Hz."
+    )
+    vad_pitch_max_hz: float = Field(
+        default=420.0,
+        description="Highest fundamental frequency for conversational speech phonation in Hz."
+    )
+    vad_reject_music: bool = Field(
+        default=True,
+        description="Enable multi-feature acoustic rejection of music, beats, and polyphonic instruments."
     )
 
     # --- Analysis Windowing & Chunking ---

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.ingestion.models import IngestedAudio, AudioChunk
+from ..ingestion.models import IngestedAudio, AudioChunk
 from .acoustic import AcousticAnalyzer, AcousticAnalysisResult
 from .spectral import SpectralAnalyzer, SpectralAnalysisResult
 from .prosody import ProsodyAnalyzer, ProsodyAnalysisResult

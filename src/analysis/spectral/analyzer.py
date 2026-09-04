@@ -6,8 +6,8 @@ Evaluates spectral distribution moments, temporal flux, rolloff, and high-freque
 from typing import Dict, List, Optional
 import numpy as np
 
-from src.analysis.base import BaseAnalysisModule
-from src.ingestion.models import IngestedAudio, AudioChunk
+from ..base import BaseAnalysisModule
+from ...ingestion.models import IngestedAudio, AudioChunk
 from .config import SpectralAnalysisConfig
 from .models import (
     SpectralAnalysisResult,

@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.analysis.manager import ParallelAnalysisOutput
+from ..analysis.manager import ParallelAnalysisOutput
 from .fusion_engine import FusedScore
 
 

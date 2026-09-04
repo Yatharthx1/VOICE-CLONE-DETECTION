@@ -2,9 +2,9 @@ from typing import Dict, Optional
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.analysis.manager import ParallelAnalysisOutput
-from src.detector.classifier import DeepfakePrediction
-from src.verification.verifier import SpeakerVerificationResult
+from ..analysis.manager import ParallelAnalysisOutput
+from ..detector.classifier import DeepfakePrediction
+from ..verification.verifier import SpeakerVerificationResult
 
 
 class FusedScore(BaseModel):

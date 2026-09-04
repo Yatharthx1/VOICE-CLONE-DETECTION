@@ -5,8 +5,8 @@ Synthesis Artifacts Analyzer Engine.
 from typing import Dict, List, Optional
 import numpy as np
 
-from src.analysis.base import BaseAnalysisModule
-from src.ingestion.models import IngestedAudio, AudioChunk
+from ..base import BaseAnalysisModule
+from ...ingestion.models import IngestedAudio, AudioChunk
 from .config import SynthesisArtifactsConfig
 from .models import (
     SynthesisArtifactsResult,

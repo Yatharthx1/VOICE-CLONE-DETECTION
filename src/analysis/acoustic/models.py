@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.analysis.base import BaseAnalysisResult
+from ..base import BaseAnalysisResult
 
 
 class PitchAnalysisResult(BaseModel):

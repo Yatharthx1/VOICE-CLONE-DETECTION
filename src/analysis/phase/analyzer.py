@@ -6,9 +6,9 @@ Evaluates Instantaneous Frequency, Group Delay, and Phase Inconsistency metrics.
 from typing import Dict, List, Optional
 import numpy as np
 
-from src.analysis.base import BaseAnalysisModule
-from src.analysis.spectral.spectrogram import SpectrogramExtractor
-from src.ingestion.models import IngestedAudio, AudioChunk
+from ..base import BaseAnalysisModule
+from ..spectral.spectrogram import SpectrogramExtractor
+from ...ingestion.models import IngestedAudio, AudioChunk
 from .config import PhaseAnalysisConfig
 from .models import (
     PhaseAnalysisResult,

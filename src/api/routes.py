@@ -1,20 +1,23 @@
+import asyncio
 import tempfile
 import time
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 import numpy as np
 import torch
 
-from src.engine import VoiceIntegrityEngine
-from src.fusion.risk_engine import RiskScenario
-from src.ingestion.models import AudioChunk
+from ..engine import VoiceIntegrityEngine
+from ..fusion.risk_engine import RiskScenario
+from ..ingestion.models import AudioChunk
 from .schemas import (
     VerifyResponse,
     StreamChunkRequest,
     StreamChunkResponse,
     SpeakerEnrollResponse,
-    HealthResponse
+    HealthResponse,
+    AudioSampleItem
 )
 
 router = APIRouter(prefix="/api/v1")
@@ -68,6 +71,33 @@ async def verify_audio_file(
             claimed_speaker_id=claimed_speaker_id,
             scenario=risk_scenario
         )
+        # Extract modular DSP indicators for the frontend forensic report
+        spectral_inds = [ind for ind in out.parallel_analysis.spectral.synthetic_indicators if not ind.startswith("None") and not ind.startswith("No audio")]
+        spectral_detected = len(spectral_inds) > 0
+        spectral_detail = " ".join(spectral_inds) if spectral_detected else "Wideband acoustic spectrum uninhibited across Nyquist bandwidth."
+
+        acoustic_inds = [ind for ind in out.parallel_analysis.acoustic.synthetic_indicators if not ind.startswith("None") and not ind.startswith("No audio")]
+        jitter_pct = out.parallel_analysis.acoustic.pitch.jitter_local_pct * 100.0 if out.parallel_analysis.acoustic.pitch else 0.0
+        pitch_detected = len(acoustic_inds) > 0
+        pitch_detail = " ".join(acoustic_inds) if pitch_detected else f"Organic biological human jitter ({jitter_pct:.2f}%) within natural phonation limits."
+
+        phase_inds = [ind for ind in out.parallel_analysis.phase.synthetic_indicators if not ind.startswith("None") and not ind.startswith("No audio")]
+        phase_detected = len(phase_inds) > 0
+        phase_detail = " ".join(phase_inds) if phase_detected else "Smooth physical vocal tract phase coherence across harmonic poles."
+
+        prosody_inds = [ind for ind in out.parallel_analysis.prosody.synthetic_indicators if not ind.startswith("None") and not ind.startswith("No audio")]
+        art_inds = [ind for ind in out.parallel_analysis.synthesis_artifacts.synthetic_indicators if not ind.startswith("None") and not ind.startswith("No audio")]
+        formant_inds = prosody_inds + art_inds
+        formant_detected = len(formant_inds) > 0
+        formant_detail = " ".join(formant_inds) if formant_detected else "Physical muscular articulation curves and natural formant dispersion."
+
+        indicators = {
+            "spectralCutoff": {"detected": spectral_detected, "detail": spectral_detail},
+            "pitchJitter": {"detected": pitch_detected, "detail": pitch_detail},
+            "phaseCoherence": {"detected": phase_detected, "detail": phase_detail},
+            "formantTransitions": {"detected": formant_detected, "detail": formant_detail}
+        }
+
         return VerifyResponse(
             session_id=out.session_id,
             verdict=out.assessment.verdict.value,
@@ -90,7 +120,8 @@ async def verify_audio_file(
             forensics={
                 "sha256": out.ingested_audio.forensic.sha256_hash,
                 "verified": out.ingested_audio.forensic.verified_integrity
-            }
+            },
+            indicators=indicators
         )
     finally:
         # Clean up temp file so our disk doesn't fill up
@@ -114,7 +145,11 @@ async def verify_stream_chunk(payload: StreamChunkRequest):
     peak = float(np.max(np.abs(samples))) if len(samples) > 0 else 0.0
     rms = float(np.sqrt(np.mean(samples ** 2) + 1e-12))
     rms_dbfs = 20.0 * np.log10(max(rms, 1e-9))
-    has_speech = bool(peak >= 0.015 and rms_dbfs > -45.0)
+
+    vad_segs, sp_sec, sil_sec, sp_ratio = engine.ingestion_pipeline.vad.detect_voice_activity(
+        samples, payload.sample_rate
+    )
+    has_speech = bool(sp_sec >= 0.20 and sp_ratio >= 0.10 and peak >= 0.015 and rms_dbfs > -50.0)
 
     chunk = AudioChunk(
         chunk_index=0,
@@ -123,7 +158,7 @@ async def verify_stream_chunk(payload: StreamChunkRequest):
         sample_rate=payload.sample_rate,
         samples=samples,
         contains_speech=has_speech,
-        speech_ratio=1.0 if has_speech else 0.0,
+        speech_ratio=float(round(sp_ratio, 3)) if has_speech else 0.0,
         is_padded=False
     )
 
@@ -207,10 +242,11 @@ async def websocket_stream_endpoint(websocket: WebSocket):
 
                 if new_windows:
                     for window_chunk in new_windows:
-                        assessment = engine.verify_stream_chunk(
-                            chunk=window_chunk,
-                            claimed_speaker_id=claimed_speaker_id,
-                            scenario=scenario
+                        assessment = await asyncio.to_thread(
+                            engine.verify_stream_chunk,
+                            window_chunk,
+                            claimed_speaker_id,
+                            scenario
                         )
                         latency_ms = (time.perf_counter() - start_t) * 1000.0
 
@@ -232,12 +268,6 @@ async def websocket_stream_endpoint(websocket: WebSocket):
                             "risk_factors": assessment.risk_factors,
                             "latency_ms": round(latency_ms, 2)
                         })
-                else:
-                    await websocket.send_json({
-                        "type": "STREAM_BUFFERING",
-                        "samples_buffered": len(stream_buffer.buffer),
-                        "windows_evaluated": stream_buffer.chunk_count
-                    })
 
     except WebSocketDisconnect:
         pass
@@ -300,3 +330,67 @@ async def list_speakers():
         }
         for s in engine.speaker_database.list_speakers()
     ]
+
+
+SAMPLES_DIR = Path(__file__).resolve().parents[2] / "samples"
+
+
+@router.get("/samples", response_model=List[AudioSampleItem])
+async def list_benchmark_samples():
+    """List available benchmark audio samples for testing in the frontend."""
+    samples = [
+        AudioSampleItem(
+            id="sample_synthetic_ai_vocoder",
+            name="Neural AI Voice Clone (Vocoder)",
+            filename="sample_synthetic_ai_vocoder.wav",
+            tag="AI Clone",
+            is_ai=True,
+            description="Synthetic speech generated with neural vocoder acoustic artifacts.",
+            duration_sec=4.5,
+            sample_rate=16000
+        ),
+        AudioSampleItem(
+            id="sample_genuine_human",
+            name="Authentic Human Voice",
+            filename="sample_genuine_human.wav",
+            tag="Human",
+            is_ai=False,
+            description="Natural biological phonation with organic pitch drift and respiration.",
+            duration_sec=4.5,
+            sample_rate=16000
+        ),
+        AudioSampleItem(
+            id="sample_compressed_speech",
+            name="Compressed Voice Call (MP3)",
+            filename="sample_compressed_speech.mp3",
+            tag="Telephony",
+            is_ai=False,
+            description="Cellular/telephony speech through low-bitrate compression codec.",
+            duration_sec=4.5,
+            sample_rate=48000
+        ),
+        AudioSampleItem(
+            id="sample_voice_call_48k",
+            name="Studio Wideband Voice (48kHz)",
+            filename="sample_voice_call_48k.wav",
+            tag="Human",
+            is_ai=False,
+            description="Uncompressed high-definition wideband audio capture.",
+            duration_sec=4.5,
+            sample_rate=48000
+        )
+    ]
+    return samples
+
+
+@router.get("/samples/{filename}")
+async def get_sample_file(filename: str):
+    """Serve sample audio file stream for playback and testing in the frontend."""
+    safe_name = Path(filename).name
+    file_path = SAMPLES_DIR / safe_name
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Sample audio file not found.")
+
+    media_type = "audio/wav" if safe_name.endswith(".wav") else "audio/mpeg" if safe_name.endswith(".mp3") else "audio/mp4"
+    return FileResponse(file_path, media_type=media_type)
+

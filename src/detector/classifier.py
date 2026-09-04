@@ -5,8 +5,8 @@ import torch
 import torch.nn as nn
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.features.schema import FEATURE_NAMES, NUM_FEATURES
-from src.features.normalizer import FeatureNormalizer
+from ..features.schema import FEATURE_NAMES, NUM_FEATURES
+from ..features.normalizer import FeatureNormalizer
 from .model import ForensicAcousticDeepfakeNet
 
 

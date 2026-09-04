@@ -6,9 +6,9 @@ Evaluates rhythm, speaking rate, intonation dynamism, and monotonic speech indic
 from typing import Dict, List, Optional
 import numpy as np
 
-from src.analysis.base import BaseAnalysisModule
-from src.analysis.acoustic.pitch import PitchAnalyzer
-from src.ingestion.models import IngestedAudio, AudioChunk
+from ..base import BaseAnalysisModule
+from ..acoustic.pitch import PitchAnalyzer
+from ...ingestion.models import IngestedAudio, AudioChunk
 from .config import ProsodyAnalysisConfig
 from .models import (
     ProsodyAnalysisResult,

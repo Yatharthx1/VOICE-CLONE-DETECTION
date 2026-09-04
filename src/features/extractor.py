@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional
 import numpy as np
 
-from src.analysis.manager import ParallelAnalysisOutput
+from ..analysis.manager import ParallelAnalysisOutput
 from .schema import FEATURE_NAMES, NUM_FEATURES
 
 

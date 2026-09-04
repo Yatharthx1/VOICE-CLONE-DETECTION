@@ -16,9 +16,10 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
   label = 'AUDIO STREAM'
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const peakRef = useRef<HTMLSpanElement | null>(null);
+  const freqRef = useRef<HTMLSpanElement | null>(null);
+  const lastMetricsUpdate = useRef<number>(0);
   const [mode, setMode] = useState<VisualizerMode>('waveform');
-  const [peakDb, setPeakDb] = useState<string>('-∞ dB');
-  const [activeFreq, setActiveFreq] = useState<string>('0 Hz');
   const animationFrameId = useRef<number | null>(null);
 
   useEffect(() => {
@@ -41,9 +42,18 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
     const freqData = new Uint8Array(bufferLength);
 
     let phaseOffset = 0;
+    let lastFrameTime = 0;
 
-    const render = () => {
-      animationFrameId.current = requestAnimationFrame(render);
+    const render = (time: number) => {
+      if (isActive) {
+        animationFrameId.current = requestAnimationFrame(render);
+      }
+
+      // Throttle rendering to max 26 FPS to prevent GPU/DWM overload during screen capture
+      if (time - lastFrameTime < 38) {
+        return;
+      }
+      lastFrameTime = time;
 
       const width = rect.width;
       const height = rect.height;
@@ -68,53 +78,54 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
         analyser.getByteTimeDomainData(timeData);
         analyser.getByteFrequencyData(freqData);
 
-        // Compute peak RMS & peak frequency
-        let sumSquares = 0;
-        let maxFreqVal = 0;
-        let maxFreqIndex = 0;
+        const now = performance.now();
+        if (now - lastMetricsUpdate.current > 150) {
+          lastMetricsUpdate.current = now;
 
-        for (let i = 0; i < bufferLength; i++) {
-          const norm = (timeData[i] - 128) / 128;
-          sumSquares += norm * norm;
+          let sumSquares = 0;
+          let maxFreqVal = 0;
+          let maxFreqIndex = 0;
 
-          if (freqData[i] > maxFreqVal) {
-            maxFreqVal = freqData[i];
-            maxFreqIndex = i;
+          // Sample every 4th bin for peak metric
+          for (let i = 0; i < bufferLength; i += 4) {
+            const norm = (timeData[i] - 128) / 128;
+            sumSquares += norm * norm;
+
+            if (freqData[i] > maxFreqVal) {
+              maxFreqVal = freqData[i];
+              maxFreqIndex = i;
+            }
+          }
+
+          if (peakRef.current) {
+            const rms = Math.sqrt((sumSquares * 4) / bufferLength);
+            const db = rms > 0 ? (20 * Math.log10(rms)).toFixed(1) : '-∞';
+            peakRef.current.textContent = `${db} dBFS`;
+          }
+
+          if (freqRef.current) {
+            const nyquist = (forensicEngine.getAudioContext()?.sampleRate || 48000) / 2;
+            const dominantFreq = Math.round((maxFreqIndex / bufferLength) * nyquist);
+            freqRef.current.textContent = `${dominantFreq} Hz`;
           }
         }
-
-        const rms = Math.sqrt(sumSquares / bufferLength);
-        const db = rms > 0 ? (20 * Math.log10(rms)).toFixed(1) : '-∞';
-        setPeakDb(`${db} dBFS`);
-
-        const nyquist = (forensicEngine.getAudioContext()?.sampleRate || 48000) / 2;
-        const dominantFreq = Math.round((maxFreqIndex / bufferLength) * nyquist);
-        setActiveFreq(`${dominantFreq} Hz`);
       } else {
-        setPeakDb('-∞ dBFS');
-        setActiveFreq('0 Hz');
+        if (peakRef.current) peakRef.current.textContent = '-∞ dBFS';
+        if (freqRef.current) freqRef.current.textContent = '0 Hz';
       }
 
       if (mode === 'waveform') {
-        // --- 1. WAVEFORM OSCILLOSCOPE ---
-        ctx.lineWidth = 2;
+        // --- 1. WAVEFORM OSCILLOSCOPE (Optimized 128 points, 0 shadowBlur) ---
+        ctx.lineWidth = 1.5;
         ctx.strokeStyle = isRecording ? '#5C141A' : 'rgba(92, 20, 26, 0.85)';
-        ctx.shadowColor = isRecording ? 'rgba(92, 20, 26, 0.35)' : 'rgba(92, 20, 26, 0.15)';
-        ctx.shadowBlur = 6;
         ctx.beginPath();
 
-        const sliceWidth = width / bufferLength;
+        const step = 4;
+        const sliceWidth = (width / bufferLength) * step;
         let x = 0;
 
-        for (let i = 0; i < bufferLength; i++) {
-          let v = 0.5;
-          if (isActive) {
-            v = timeData[i] / 255.0;
-          } else {
-            // Idle subtle breathing wave
-            v = 0.5 + Math.sin(i * 0.05 + phaseOffset) * 0.02;
-          }
-
+        for (let i = 0; i < bufferLength; i += step) {
+          const v = isActive ? timeData[i] / 255.0 : 0.5;
           const y = v * height;
 
           if (i === 0) {
@@ -128,48 +139,38 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
 
         ctx.lineTo(width, height / 2);
         ctx.stroke();
-        ctx.shadowBlur = 0; // Reset shadow
 
       } else if (mode === 'spectrum') {
         // --- 2. FFT SPECTRAL BARS ---
-        const barCount = 48;
+        const barCount = 36;
         const barWidth = (width / barCount) - 2;
         const step = Math.floor(bufferLength / barCount);
 
         for (let i = 0; i < barCount; i++) {
-          let barHeight = 4;
+          let barHeight = 2;
           if (isActive) {
             const val = freqData[i * step] || 0;
             barHeight = Math.max(4, (val / 255) * (height - 20));
-          } else {
-            barHeight = 4 + Math.sin(i * 0.2 + phaseOffset) * 2;
           }
 
           const x = i * (barWidth + 2);
           const y = height - barHeight;
 
-          // Gradient from deep burgundy to warm rose/terracotta
-          const grad = ctx.createLinearGradient(0, height, 0, y);
-          grad.addColorStop(0, '#5C141A');
-          grad.addColorStop(1, '#B85D64');
-
-          ctx.fillStyle = grad;
+          ctx.fillStyle = '#5C141A';
           ctx.fillRect(x, y, barWidth, barHeight);
         }
 
       } else if (mode === 'phase') {
-        // --- 3. HARMONIC PHASE LISSAJOUS / ORBIT ---
+        // --- 3. HARMONIC PHASE LISSAJOUS / ORBIT (Optimized 60 samples) ---
         const centerX = width / 2;
         const centerY = height / 2;
         const radius = Math.min(width, height) * 0.38;
 
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = '#5C141A';
-        ctx.shadowColor = 'rgba(92, 20, 26, 0.25)';
-        ctx.shadowBlur = 6;
         ctx.beginPath();
 
-        const samples = 180;
+        const samples = 60;
         for (let i = 0; i < samples; i++) {
           const angle = (i / samples) * Math.PI * 2;
           let amp = 1;
@@ -178,8 +179,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
             const dataIdx = Math.floor((i / samples) * (bufferLength / 2));
             const freqVal = (freqData[dataIdx] || 0) / 255.0;
             amp = 0.8 + freqVal * 0.6;
-          } else {
-            amp = 0.95 + Math.sin(angle * 4 + phaseOffset) * 0.05;
           }
 
           const r = radius * amp;
@@ -194,13 +193,14 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
         }
         ctx.closePath();
         ctx.stroke();
-        ctx.shadowBlur = 0;
       }
 
-      phaseOffset += 0.03;
+      if (isActive) {
+        phaseOffset += 0.03;
+      }
     };
 
-    render();
+    animationFrameId.current = requestAnimationFrame(render);
 
     return () => {
       if (animationFrameId.current) {
@@ -225,13 +225,13 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
             <span className="font-mono">{label}</span>
           </span>
           <span className="dsp-metric-pill font-mono">
-            PEAK: <span className="metric-val">{peakDb}</span>
+            PEAK: <span ref={peakRef} className="metric-val">-∞ dBFS</span>
           </span>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <span className="dsp-metric-pill font-mono">
-            FREQ: <span className="metric-val">{activeFreq}</span>
+            FREQ: <span ref={freqRef} className="metric-val">0 Hz</span>
           </span>
           <span className="dsp-metric-pill font-mono">
             RATE: <span className="metric-val">48.0 kHz</span>

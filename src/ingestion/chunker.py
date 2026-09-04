@@ -9,6 +9,7 @@ import numpy as np
 
 from .config import IngestionConfig
 from .models import AudioChunk, VADSegment
+from .vad import VoiceActivityDetector
 
 
 class AudioChunker:
@@ -193,6 +194,7 @@ class StreamingAudioBuffer:
         self.buffer = np.zeros(0, dtype=np.float32)
         self.total_samples_received = 0
         self.chunk_count = 0
+        self.vad = VoiceActivityDetector(config=self.config)
 
     def set_input_sample_rate(self, input_sr: int):
         """Dynamically update input sample rate when WebSocket handshake config is received."""
@@ -228,22 +230,16 @@ class StreamingAudioBuffer:
             else:
                 chunk_samples = raw_chunk
 
-            # Dynamic energy and VAD on live stream window at target 16kHz
+            # Multi-feature VAD on live stream window at target 16kHz
             peak = float(np.max(np.abs(chunk_samples))) if len(chunk_samples) > 0 else 0.0
             rms = float(np.sqrt(np.mean(chunk_samples ** 2) + 1e-12))
             rms_dbfs = 20.0 * np.log10(max(rms, 1e-9))
 
-            frame_size = int(0.02 * self.target_sr)  # 20ms frames
-            num_frames = len(chunk_samples) // frame_size
-            if num_frames > 0:
-                frames = chunk_samples[:num_frames * frame_size].reshape(num_frames, frame_size)
-                frame_energies = np.mean(frames ** 2, axis=1)
-                speech_frames = np.sum(frame_energies > 1e-4)
-                speech_ratio = float(speech_frames / num_frames)
-            else:
-                speech_ratio = 0.0
-
-            contains_speech = bool(speech_ratio >= 0.15 and rms_dbfs > -45.0 and peak >= 0.02)
+            vad_segments, sp_sec, sil_sec, speech_ratio = self.vad.detect_voice_activity(
+                chunk_samples,
+                self.target_sr
+            )
+            contains_speech = bool(sp_sec >= 0.20 and speech_ratio >= 0.10 and peak >= 0.015 and rms_dbfs > -50.0)
 
             ready_chunks.append(AudioChunk(
                 chunk_index=self.chunk_count,

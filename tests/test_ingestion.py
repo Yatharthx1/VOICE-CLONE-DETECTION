@@ -195,6 +195,76 @@ def test_vad_silence(silence_wav):
     assert silence_sec == pytest.approx(2.0, abs=0.1)
 
 
+def test_vad_rejects_music_and_instruments():
+    """Verify VAD rejects musical beats, polyphonic instrument chords, drums, and environmental hum."""
+    detector = VoiceActivityDetector()
+    sr = 16000
+    dur = 4.0
+    t = np.linspace(0, dur, int(sr * dur), endpoint=False)
+
+    # 1. Pop / EDM music with 55Hz kick drum and 65Hz bassline
+    kick = 0.8 * np.sin(2 * np.pi * 55 * t) * (0.5 + 0.5 * np.sin(2 * np.pi * 2 * t))
+    bass = 0.4 * np.sin(2 * np.pi * 65.4 * t)
+    synth = 0.3 * np.sin(2 * np.pi * 329.6 * t)
+    edm_music = kick + bass + synth
+    _, sp_edm, _, ratio_edm = detector.detect_voice_activity(edm_music, sr)
+    assert ratio_edm == 0.0
+    assert sp_edm == 0.0
+
+    # 2. Piano / Guitar polyphonic chords with overtones (C-major: C4=261.6Hz, E4=329.6Hz, G4=392.0Hz)
+    chords_harm = np.zeros_like(t)
+    for f in [261.63, 329.63, 392.00]:
+        for k in range(1, 5):
+            chords_harm += (0.2 / k) * np.sin(2 * np.pi * k * f * t)
+    chords_harm = chords_harm * (0.5 + 0.5 * np.sin(2 * np.pi * 0.7 * t))
+    chords_harm = (chords_harm / np.max(np.abs(chords_harm))) * 0.7
+    _, sp_chords, _, ratio_chords = detector.detect_voice_activity(chords_harm, sr)
+    assert ratio_chords == 0.0
+    assert sp_chords == 0.0
+
+    # 3. Drum kit solo (sub-bass kick + noise snare)
+    drums = kick + 0.4 * np.random.normal(0, 1, len(t)) * (np.sin(2 * np.pi * 2 * t) > 0.7)
+    _, sp_drums, _, ratio_drums = detector.detect_voice_activity(drums, sr)
+    assert ratio_drums == 0.0
+    assert sp_drums == 0.0
+
+    # 4. Environmental hum / rumble (fan, motor, air conditioner)
+    hum = np.cumsum(np.random.normal(0, 0.05, len(t)))
+    hum = (hum / np.max(np.abs(hum))) * 0.5
+    _, sp_hum, _, ratio_hum = detector.detect_voice_activity(hum, sr)
+    assert ratio_hum == 0.0
+    assert sp_hum == 0.0
+
+    # 5. Pop song with singing melody (C4, E4, G4, A4) and acoustic guitar backing
+    singing = np.zeros_like(t)
+    for i, f0 in enumerate([261.63, 329.63, 392.00, 440.00]):
+        st = int(i * 1.0 * sr)
+        en = int((i + 1) * 1.0 * sr)
+        t_seg = t[st:en] - t[st]
+        singing[st:en] = 0.5 * np.sin(2 * np.pi * f0 * t_seg) + 0.2 * np.sin(4 * np.pi * f0 * t_seg)
+    guitar = 0.2 * np.sin(2 * np.pi * 196.0 * t) + 0.2 * np.sin(2 * np.pi * 246.9 * t)
+    song = (singing + guitar) * 0.7
+    _, sp_song, _, ratio_song = detector.detect_voice_activity(song, sr)
+    assert ratio_song == 0.0
+    assert sp_song == 0.0
+
+
+def test_vad_detects_speech_with_background_music(speech_wav):
+    """Verify VAD ignores background music and detects spoken human voice."""
+    audio, sr = sf.read(str(speech_wav), dtype="float32")
+    detector = VoiceActivityDetector()
+    dur = len(audio) / sr
+    t = np.linspace(0, dur, len(audio), endpoint=False)
+    # Add background music (55Hz bass beat + 330Hz synth)
+    bg_music = 0.08 * (np.sin(2 * np.pi * 55 * t) + np.sin(2 * np.pi * 329.6 * t))
+    mixed = audio + bg_music
+
+    segments, sp_sec, sil_sec, sp_ratio = detector.detect_voice_activity(mixed, sr)
+    assert sp_sec > 0.5
+    assert sp_ratio >= 0.20
+    assert any(seg.is_speech for seg in segments)
+
+
 # ============================================================================
 # 6. Audio Window Chunker & Streaming Buffer Tests
 # ============================================================================

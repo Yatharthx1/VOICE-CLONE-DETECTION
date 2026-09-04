@@ -1,7 +1,9 @@
-import React from 'react';
-import { ShieldCheck, Code2 } from 'lucide-react';
+import { ShieldCheck, Server, ExternalLink } from 'lucide-react';
+import { getApiBaseUrl } from '../utils/apiConfig';
 
-export const Navbar: React.FC = () => {
+export const Navbar = () => {
+  const apiDocsUrl = `${getApiBaseUrl()}/docs`;
+
   return (
     <header className="navbar">
       <div className="brand-wrapper">
@@ -13,11 +15,18 @@ export const Navbar: React.FC = () => {
         </div>
       </div>
 
-      <div className="nav-right">
-        <div className="nav-sdk-link">
-          <Code2 size={14} />
-          <span>APIs & SDK — Coming Soon</span>
-        </div>
+      <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <a
+          href={apiDocsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="nav-sdk-link"
+          style={{ textDecoration: 'none', color: 'inherit' }}
+        >
+          <Server size={14} />
+          <span>API Docs</span>
+          <ExternalLink size={12} style={{ opacity: 0.6 }} />
+        </a>
       </div>
     </header>
   );

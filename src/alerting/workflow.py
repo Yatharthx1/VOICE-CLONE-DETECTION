@@ -1,5 +1,5 @@
 from typing import Optional
-from src.fusion.risk_engine import RiskAssessment, RiskLevel
+from ..fusion.risk_engine import RiskAssessment, RiskLevel
 from .notifier import AlertDispatcher, AlertPayload
 
 

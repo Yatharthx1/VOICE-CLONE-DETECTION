@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -9,6 +8,8 @@ import {
   Layers,
   Waves,
   CircuitBoard,
+  AlertTriangle,
+  Music,
 } from 'lucide-react';
 import type { ForensicReport } from '../utils/audioEngine';
 
@@ -17,13 +18,25 @@ interface ResultViewProps {
   onReset: () => void;
 }
 
-export const ResultView: React.FC<ResultViewProps> = ({ report, onReset }) => {
-  const isAi = report.isAi;
-  const verdictClass = isAi ? 'ai-detected' : 'human-verified';
+export const ResultView = ({ report, onReset }: ResultViewProps) => {
+  const isNoSpeech = report.verdict === 'NO_SPEECH' || report.rawVerdict === 'NO_SPEECH';
+  const isAi = !isNoSpeech && report.isAi;
+  const isSuspicious = !isNoSpeech && (report.verdict === 'SUSPICIOUS_VOICE' || report.rawVerdict === 'UNCERTAIN');
+  const verdictClass = isAi
+    ? 'ai-detected'
+    : isSuspicious
+    ? 'suspicious-detected'
+    : isNoSpeech
+    ? 'nospeech-detected'
+    : 'human-verified';
   const prob = report.aiProbability;
 
   const meterColor = isAi
     ? `linear-gradient(90deg, #b91c1c, #c2410c)`
+    : isSuspicious
+    ? `linear-gradient(90deg, #d97706, #f59e0b)`
+    : isNoSpeech
+    ? `linear-gradient(90deg, #475569, #64748b)`
     : `linear-gradient(90deg, #15803d, #22c55e)`;
 
   return (
@@ -32,17 +45,42 @@ export const ResultView: React.FC<ResultViewProps> = ({ report, onReset }) => {
       <div className={`verdict-header-card ${verdictClass}`}>
         <div className="verdict-left-box">
           <div className="verdict-icon-badge">
-            {isAi ? <ShieldAlert size={26} /> : <ShieldCheck size={26} />}
+            {isAi ? (
+              <ShieldAlert size={26} />
+            ) : isSuspicious ? (
+              <AlertTriangle size={26} />
+            ) : isNoSpeech ? (
+              <Music size={26} />
+            ) : (
+              <ShieldCheck size={26} />
+            )}
           </div>
           <div>
             <div className="verdict-score-headline font-mono">
-              {prob}% {isAi ? 'AI Generated' : 'Human Authentic'}
+              {isNoSpeech
+                ? 'Non-Speech / Music Detected'
+                : `${prob}% ${isAi ? 'AI Generated (Synthetic)' : isSuspicious ? 'Suspicious / Inconclusive' : 'Human Authentic'}`}
             </div>
             <div className="verdict-sublabel">
-              {isAi
-                ? 'Synthetic vocoder artifacts & neural TTS patterns detected'
-                : 'Organic vocal characteristics verified — no synthetic artifacts'}
+              {report.verdictExplanation ||
+                (isNoSpeech
+                  ? 'Audio contains music, instruments, or non-vocal audio rather than human speech'
+                  : isAi
+                  ? 'Synthetic vocoder artifacts & neural TTS patterns detected'
+                  : 'Organic vocal characteristics verified — no synthetic artifacts')}
             </div>
+            {report.recommendedAction && (
+              <div
+                style={{
+                  marginTop: '0.5rem',
+                  fontSize: '0.78rem',
+                  color: 'var(--text-muted)',
+                  fontFamily: 'monospace',
+                }}
+              >
+                Action: <span style={{ color: isAi ? '#f87171' : isNoSpeech ? '#94a3b8' : '#6ee7b7' }}>{report.recommendedAction}</span>
+              </div>
+            )}
           </div>
         </div>
 

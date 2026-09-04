@@ -25,8 +25,19 @@ class VerifyResponse(BaseModel):
     speaker_match: bool
     speaker_similarity: float
     ml_synthetic_probability: float
-    is_checkpoint_loaded: bool = False
     forensics: Dict[str, Any]
+    indicators: Optional[Dict[str, Any]] = None
+
+
+class AudioSampleItem(BaseModel):
+    id: str
+    name: str
+    filename: str
+    tag: str
+    is_ai: bool
+    description: str
+    duration_sec: Optional[float] = None
+    sample_rate: Optional[int] = None
 
 
 class StreamChunkRequest(BaseModel):

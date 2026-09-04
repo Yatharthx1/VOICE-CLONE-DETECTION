@@ -3,7 +3,8 @@
 export interface ForensicReport {
   isAi: boolean;
   aiProbability: number; // 0 to 100
-  verdict: 'AI_CLONE_DETECTED' | 'AUTHENTIC_HUMAN' | 'SUSPICIOUS_VOICE';
+  verdict: 'AI_CLONE_DETECTED' | 'AUTHENTIC_HUMAN' | 'SUSPICIOUS_VOICE' | 'NO_SPEECH';
+  rawVerdict?: string;
   riskScore: number; // 0 to 100
   confidence: number; // 0 to 100
   fileName: string;
@@ -16,6 +17,9 @@ export interface ForensicReport {
     formantTransitions: { detected: boolean; detail: string };
   };
   reasons: string[];
+  recommendedAction?: string;
+  verdictExplanation?: string;
+  scenario?: string;
 }
 
 export interface PresetSample {
@@ -131,6 +135,61 @@ class AudioForensicEngine {
     return this.analyser;
   }
 
+  public async startSystemAudio(): Promise<MediaStream> {
+    const ctx = this.getAudioContext();
+    const analyser = this.getAnalyser();
+
+    if (this.micStream) {
+      this.stopMicrophone();
+    }
+
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      throw new Error('System audio capture is not supported in this browser. Please use Chrome or Edge.');
+    }
+
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        width: { max: 320 },
+        height: { max: 240 },
+        frameRate: { max: 5 },
+      },
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+      systemAudio: 'include',
+      selfBrowserSurface: 'exclude',
+    } as DisplayMediaStreamOptions);
+
+    // Mute video track immediately to prevent GPU rendering
+    const videoTracks = stream.getVideoTracks();
+    videoTracks.forEach((t) => {
+      t.enabled = false;
+      setTimeout(() => {
+        try {
+          t.stop();
+        } catch {
+          // ignore
+        }
+      }, 300);
+    });
+
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error(
+        "No audio track was selected. When the browser prompt opens, choose a Tab or Screen and ensure 'Also share tab audio' or 'Share system audio' is checked!"
+      );
+    }
+
+    this.micStream = stream;
+    this.micSource = ctx.createMediaStreamSource(stream);
+    this.micSource.connect(analyser);
+
+    return stream;
+  }
+
   public async startMicrophone(): Promise<MediaStream> {
     const ctx = this.getAudioContext();
     const analyser = this.getAnalyser();
@@ -139,13 +198,13 @@ class AudioForensicEngine {
       this.stopMicrophone();
     }
 
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: true, // required by some browsers for getDisplayMedia, even if we only want audio
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
-      }
+      },
+      video: false,
     });
 
     this.micStream = stream;
@@ -334,3 +393,46 @@ class AudioForensicEngine {
 }
 
 export const forensicEngine = new AudioForensicEngine();
+
+/**
+ * Encodes an array of Float32Array PCM chunks into a valid 16-bit mono WAV Blob.
+ */
+export function encodeWavBlob(chunks: Float32Array[], sampleRate: number): Blob {
+  const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+  const buffer = new ArrayBuffer(44 + totalLength * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
+    }
+  };
+
+  // RIFF header
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + totalLength * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true); // PCM subchunk size
+  view.setUint16(20, 1, true); // Format = PCM
+  view.setUint16(22, 1, true); // Channels = 1 (mono)
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // Byte rate
+  view.setUint16(32, 2, true); // Block align
+  view.setUint16(34, 16, true); // Bits per sample
+  writeString(36, 'data');
+  view.setUint32(40, totalLength * 2, true);
+
+  // PCM data
+  let offset = 44;
+  for (const chunk of chunks) {
+    for (let i = 0; i < chunk.length; i++) {
+      const s = Math.max(-1, Math.min(1, chunk[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([view], { type: 'audio/wav' });
+}
+

@@ -155,22 +155,64 @@ python tests/run_interactive_check.py --enroll "path/to/genuine_voice.wav" --spe
 
 ---
 
-## 💻 Python SDK API Quickstart
+## 📦 Pip Installation & Python SDK Access
 
+You can install this framework directly into any Python environment via `pip`:
+
+```bash
+# Install package
+pip install .
+
+# Or editable install for local development
+pip install -e .
+```
+
+### 1. One-Line Audio Verification
 ```python
-from src.engine import VoiceIntegrityEngine
-from src.fusion.risk_engine import RiskScenario
+import voice_clone_detection as vcd
 
-# 1. Initialize engine
-engine = VoiceIntegrityEngine(default_scenario=RiskScenario.HIGH_VALUE_TRANSACTION)
-
-# 2. Perform verification
-result = engine.verify_file("path/to/voice_sample.mp3", claimed_speaker_id="USER_01")
-
-# 3. Inspect outputs
+# Quick one-line check
+result = vcd.verify("path/to/voice_sample.mp3")
 print(result.summary())
 print(f"Verdict: {result.assessment.verdict.value}")
-print(f"Risk Score: {result.assessment.dynamic_risk_score:.1f} / 100.0")
+print(f"Dynamic Risk Score: {result.assessment.dynamic_risk_score:.1f} / 100.0")
 print(f"Action: {result.assessment.recommended_action}")
-print(f"ML Deepfake Probability: {result.ml_prediction.synthetic_probability * 100:.1f}%")
+```
+
+### 2. Full Engine Orchestration
+```python
+from voice_clone_detection import VoiceIntegrityEngine, RiskScenario
+
+# Initialize with custom scenario (High-Value Transfer, Telephony, Support, etc.)
+engine = VoiceIntegrityEngine(default_scenario=RiskScenario.HIGH_VALUE_TRANSACTION)
+
+# Run verification with biometric speaker matching
+result = engine.verify_file("path/to/voice_sample.mp3", claimed_speaker_id="CEO_001")
+print(result.summary())
+```
+
+---
+
+## 🏷️ Changing the Main Project Name Anytime
+
+The project name is completely decoupled. You can change it anytime in one of three ways:
+
+1. **In [`pyproject.toml`](file:///C:/Users/YATHARTH/Desktop/PS1/pyproject.toml)**:
+   ```toml
+   [project]
+   name = "your_new_name"  # e.g. "voxguard", "deepfake_shield"
+   ```
+2. **Via environment variable during pip install**:
+   ```bash
+   PROJECT_NAME=voxguard pip install -e .
+   ```
+3. **Via `project_name.txt`**:
+   Write the desired project name into `project_name.txt`.
+
+Once renamed, simply install via `pip install -e .` and import it under your new name:
+```python
+import your_new_name as vcd
+
+result = vcd.verify("sample.wav")
+print(result.summary())
 ```

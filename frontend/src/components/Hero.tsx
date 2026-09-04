@@ -1,7 +1,4 @@
-import React from 'react';
-import { Sparkles } from 'lucide-react';
-
-export const Hero: React.FC = () => {
+export const Hero = () => {
   return (
     <section className="hero-section">
       <h1 className="hero-headline">

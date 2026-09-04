@@ -5,7 +5,7 @@ Data models for Prosody Analysis outputs.
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.analysis.base import BaseAnalysisResult
+from ..base import BaseAnalysisResult
 
 
 class RhythmMetrics(BaseModel):

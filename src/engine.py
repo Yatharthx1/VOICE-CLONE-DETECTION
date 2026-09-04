@@ -3,20 +3,20 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.ingestion.config import IngestionConfig
-from src.ingestion.pipeline import AudioIngestionPipeline
-from src.ingestion.models import IngestedAudio, AudioChunk
-from src.analysis.manager import ParallelAnalysisManager, ParallelAnalysisOutput
-from src.features.extractor import FeatureExtractor
-from src.features.normalizer import FeatureNormalizer
-from src.detector.classifier import DeepfakeClassifier, DeepfakePrediction
-from src.verification.verifier import SpeakerVerifier, SpeakerVerificationResult
-from src.verification.database import SpeakerDatabase
-from src.fusion.fusion_engine import ScoreFusionEngine, FusedScore
-from src.fusion.calibrator import ConfidenceCalibrator, CalibratedResult
-from src.fusion.risk_engine import RiskScoringEngine, RiskAssessment, RiskScenario, Verdict, RiskLevel
-from src.alerting.notifier import AlertDispatcher, AlertPayload
-from src.alerting.workflow import InterventionWorkflow
+from .ingestion.config import IngestionConfig
+from .ingestion.pipeline import AudioIngestionPipeline
+from .ingestion.models import IngestedAudio, AudioChunk
+from .analysis.manager import ParallelAnalysisManager, ParallelAnalysisOutput
+from .features.extractor import FeatureExtractor
+from .features.normalizer import FeatureNormalizer
+from .detector.classifier import DeepfakeClassifier, DeepfakePrediction
+from .verification.verifier import SpeakerVerifier, SpeakerVerificationResult
+from .verification.database import SpeakerDatabase
+from .fusion.fusion_engine import ScoreFusionEngine, FusedScore
+from .fusion.calibrator import ConfidenceCalibrator, CalibratedResult
+from .fusion.risk_engine import RiskScoringEngine, RiskAssessment, RiskScenario, Verdict, RiskLevel
+from .alerting.notifier import AlertDispatcher, AlertPayload
+from .alerting.workflow import InterventionWorkflow
 
 
 class VerificationOutput(BaseModel):
@@ -128,7 +128,7 @@ class VoiceIntegrityEngine:
         # Step 1: Decode and take cryptographic fingerprints
         ingested = self.ingestion_pipeline.process_file(file_path)
 
-        # Silence / Phonation Gate: Reject silence immediately
+        # Silence / Phonation Gate: Reject silence or non-speech/music audio immediately
         is_silent = (
             not ingested.contains_speech or
             ingested.speech_duration_sec < 0.25 or
@@ -137,9 +137,14 @@ class VoiceIntegrityEngine:
         )
 
         if is_silent:
+            if np.max(np.abs(ingested.processed_audio)) < 0.005 or ingested.metadata.rms_dbfs < -52.0:
+                reason = "Audio contains silence or no active audio signal."
+            else:
+                reason = "Non-speech audio detected (Music / Instrumental / Noise - no active human speech phonation)."
+
             assessment = self.risk_engine.create_no_speech_assessment(
                 scenario=scenario,
-                reason="Audio contains silence or no active speech phonation."
+                reason=reason
             )
             analysis_out = self.analysis_manager.analyze_ingested(ingested)
             ml_pred = DeepfakePrediction(
@@ -294,10 +299,15 @@ class VoiceIntegrityEngine:
         rms = float(np.sqrt(np.mean(chunk.samples ** 2) + 1e-12))
         rms_dbfs = 20.0 * np.log10(max(rms, 1e-9))
 
-        if not chunk.contains_speech or peak < 0.015 or chunk.speech_ratio < 0.15 or rms_dbfs < -45.0:
+        if not chunk.contains_speech or peak < 0.015 or chunk.speech_ratio < 0.10 or rms_dbfs < -50.0:
+            if peak < 0.01 or rms_dbfs < -50.0:
+                reason = "Incoming window contains silence / no active audio signal."
+            else:
+                reason = "Incoming window contains non-speech audio (music / instrumental / noise). No human voice detected."
+
             return self.risk_engine.create_no_speech_assessment(
                 scenario=scenario,
-                reason="Incoming window contains silence / no active speech activity."
+                reason=reason
             )
 
         # Fast-lane evaluation for live audio chunks

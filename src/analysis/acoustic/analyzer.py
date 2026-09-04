@@ -7,8 +7,8 @@ into unified forensic anomaly scoring and ML feature representations.
 from typing import Any, Dict, List, Optional
 import numpy as np
 
-from src.analysis.base import BaseAnalysisModule
-from src.ingestion.models import IngestedAudio, AudioChunk
+from ..base import BaseAnalysisModule
+from ...ingestion.models import IngestedAudio, AudioChunk
 from .config import AcousticAnalysisConfig
 from .pitch import PitchAnalyzer
 from .formants import FormantAnalyzer

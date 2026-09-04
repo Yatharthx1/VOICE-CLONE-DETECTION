@@ -34,7 +34,26 @@ def test_api_verify_file_upload(speech_wav):
     assert "verdict" in data
     assert "dynamic_risk_score" in data
     assert "recommended_action" in data
+    assert "indicators" in data
+    assert "spectralCutoff" in data["indicators"]
+    assert "pitchJitter" in data["indicators"]
+    assert "phaseCoherence" in data["indicators"]
+    assert "formantTransitions" in data["indicators"]
     assert data["scenario"] == "high_value_transaction"
+
+
+def test_api_benchmark_samples():
+    """Verify /api/v1/samples and /api/v1/samples/{filename} endpoints."""
+    res = client.get("/api/v1/samples")
+    assert res.status_code == 200
+    samples = res.json()
+    assert len(samples) >= 2
+    assert any(s["filename"] == "sample_genuine_human.wav" for s in samples)
+
+    # Test downloading sample audio
+    sample_res = client.get("/api/v1/samples/sample_genuine_human.wav")
+    assert sample_res.status_code == 200
+    assert len(sample_res.content) > 0
 
 
 def test_api_stream_chunk():

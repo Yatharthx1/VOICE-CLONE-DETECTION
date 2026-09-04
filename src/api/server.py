@@ -23,9 +23,27 @@ app.add_middleware(
 
 app.include_router(router)
 
-# Mount the live web UI
+# Serve the React frontend (frontend/dist) or fallback to static prototype
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-if STATIC_DIR.exists():
+
+if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
+    assets_dir = FRONTEND_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str = ""):
+        # Don't intercept API routes or documentation
+        if full_path.startswith("api/") or full_path in ["docs", "redoc", "openapi.json"]:
+            return None
+        candidate_file = FRONTEND_DIST / full_path
+        if full_path and candidate_file.exists() and candidate_file.is_file():
+            return FileResponse(candidate_file)
+        return FileResponse(FRONTEND_DIST / "index.html")
+
+elif STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.get("/", include_in_schema=False)

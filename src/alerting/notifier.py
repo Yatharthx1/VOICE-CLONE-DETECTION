@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.fusion.risk_engine import RiskAssessment, RiskLevel
+from ..fusion.risk_engine import RiskAssessment, RiskLevel
 
 
 class AlertPayload(BaseModel):
